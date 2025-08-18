@@ -205,3 +205,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Tennis project specific
+data/raw/
+data/temp/
+*.log
+models/saved_models/
+.DS_Store

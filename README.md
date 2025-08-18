@@ -50,3 +50,22 @@ pip install -r requirements.txt
 
 # Run data collection
 python src/data_collection.py
+```
+## Project Structure
+tennis-match-predictor/
+├── data/                   # Raw and processed data
+├── notebooks/              # Jupyter notebooks for analysis
+├── src/                    # Source code modules
+│   ├── data_processor.py   # Data cleaning and processing
+│   ├── feature_engineer.py # Feature engineering
+│   ├── models/            # ML and stochastic models
+│   └── web_app/           # Web application
+├── tests/                 # Unit tests
+├── docs/                  # Documentation
+└── requirements.txt       # Python dependencies
+
+## Author
+Kyle Shigekawa - UCLA Mathematics of Computation
+
+## License
+MIT License
