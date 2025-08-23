@@ -76,3 +76,51 @@ class TennisDataProcessor:
         self.matches_df = df
         self.quality_metrics = quality_metrics  # Store for later reference
         return df
+    
+    def calculate_elo_ratings(self, initial_rating=1500, k_factor=32):
+        """Calculate ELO ratings for all players"""
+        df = self.matches_df.copy().sort_values('tourney_date')
+
+        # Initialize player ratings
+        player_ratings = {}
+
+        # Track ratings over time
+        match_data = []
+
+        for idx, match in df.iterrows():
+            winner = match['winner_name']
+            loser = match['loser_name']
+
+            # Initialize ratings if players are new
+            if winner not in player_ratings:
+                player_ratings[winner] = initial_rating
+            if loser not in player_ratings:
+                player_ratings[loser] = initial_rating
+
+            # Get current ratings
+            winner_rating = player_ratings[winner]
+            loser_rating = player_ratings[loser]
+
+            # Calculate expected scores
+            winner_expected = 1 / (1 + 10**((loser_rating - winner_rating) / 400))
+            loser_expected = 1 - winner_expected
+
+            # Update ratings
+            player_ratings[winner] += k_factor * (1 - winner_expected)
+            player_ratings[loser] += k_factor * (0 - loser_expected)
+
+            # Store match with pre-match ratings
+            match_data.append({
+                'tourney_date': match['tourney_date'],
+                'winner': winner,
+                'loser': loser,
+                'winner_elo_before': winner_rating,
+                'loser_elo_before': loser_rating,
+                'winner_elo_after': player_ratings[winner],
+                'loser_elo_after': player_ratings[loser],
+                'surface': match['surface'],
+                'tourney_level': match['tourney_level']
+            })
+        
+        return pd.DataFrame(match_data), player_ratings
+
