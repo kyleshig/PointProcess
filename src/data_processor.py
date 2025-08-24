@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 class TennisDataProcessor:
     def __init__(self):
@@ -123,4 +124,168 @@ class TennisDataProcessor:
             })
         
         return pd.DataFrame(match_data), player_ratings
+    
+    def calculate_surface_elo(self, surfaces=['Hard', 'Clay', 'Grass']):
+        """Calculate separate ELO ratings for each surface"""
+        surface_ratings = {}
+        surface_matches = {}
 
+        print("=== CALCULATING SURFACE-SPECIFIC ELO RATINGS ===")
+
+        for surface in surfaces:
+            surface_data = self.matches_df[self.matches_df['surface'] == surface]
+            print(f"\n{surface} court: {len(surface_data)} matches found")
+
+            if len(surface_data) > 0:
+                matches, ratings = self.calculate_elo_ratings_for_surface(surface_data, surface)
+                surface_ratings[surface] = ratings
+                surface_matches[surface] = matches
+        
+        return surface_ratings, surface_matches
+    
+    def calculate_elo_ratings_for_surface(self, df, surface_name, initial_rating=1500, k_factor=32):
+        """Calculate ELO ratings for a specific surface"""
+        df_surface = df.copy().sort_values('tourney_date')
+
+        # Initialize player ratings for this surface
+        player_ratings = {}
+
+        # Track ratings over time for this surface
+        match_data = []
+
+        for idx, match in df_surface.iterrows():
+            winner = match['winner_name']
+            loser = match['loser_name']
+
+            # Initialize ratings if new players on this surface
+            if winner not in player_ratings:
+                player_ratings[winner] = initial_rating
+            if loser not in player_ratings:
+                player_ratings[loser] = initial_rating
+            
+            # Get current ratings for this surface
+            winner_rating = player_ratings[winner]
+            loser_rating = player_ratings[loser]
+
+            # Calculate expected scores
+            winner_expected = 1 / (1 + 10**((loser_rating - winner_rating) / 400))
+            loser_expected = 1 - winner_expected
+
+            # Update ratings for this surface
+            player_ratings[winner] += k_factor * (1 - winner_expected)
+            player_ratings[loser] += k_factor * (0 - loser_expected)
+
+            # Store match with pre-match surface ratings
+            match_data.append({
+                'tourney_date': match['tourney_date'],
+                'winner': winner,
+                'loser': loser,
+                'surface': surface_name,
+                'winner_surface_elo_before': winner_rating,
+                'loser_surface_elo_before': loser_rating,
+                'winner_surface_elo_after': player_ratings[winner],
+                'loser_surface_elo_after': player_ratings[loser],
+                'tourney_level': match['tourney_level']
+            })
+
+        return pd.DataFrame(match_data), player_ratings
+    
+    def get_player_surface_comparison(self, player_name, surface_ratings):
+        """Compare a player's relative performance across different surfaces"""
+        player_surfaces = {}
+        surface_stats = {}
+
+        # Calculate surface-specific statistics
+        for surface, ratings in surface_ratings.items():
+            ratings_list = list(ratings.values())
+            surface_stats[surface] = {
+            'mean': np.mean(ratings_list),
+            'std': np.std(ratings_list),
+            'max': max(ratings_list),
+            'min': min(ratings_list),
+            'total_players': len(ratings_list)
+        }
+            
+        # Calculate player's relative performance on each surface
+        for surface, ratings in surface_ratings.items():
+            if player_name in ratings:
+                raw_rating = ratings[player_name]
+                
+                # Calculate percentile ranking (0-100)
+                sorted_ratings = sorted(ratings.values(), reverse=True)
+                rank = sorted_ratings.index(raw_rating) + 1
+                percentile = ((len(sorted_ratings) - rank + 1) / len(sorted_ratings)) * 100
+                
+                # Calculate z-score 
+                z_score = (raw_rating - surface_stats[surface]['mean']) / surface_stats[surface]['std']
+                
+                # Calculate relative strength (percentage of surface maximum)
+                max_rating = surface_stats[surface]['max']
+                min_rating = surface_stats[surface]['min']
+                relative_strength = ((raw_rating - min_rating) / (max_rating - min_rating)) * 100
+                
+                player_surfaces[surface] = {
+                    'raw_rating': raw_rating,
+                    'rank': rank,
+                    'percentile': percentile,
+                    'z_score': z_score,
+                    'relative_strength': relative_strength,
+                    'surface_stats': surface_stats[surface]
+                }
+            else:
+                player_surfaces[surface] = None # No match data for this player on this surface
+
+        return player_surfaces
+
+    def analyze_player_surface_specialization(self, player_name, surface_ratings):
+        """Analyze a player's surface specialization with proper normalization"""
+        comparison = self.get_player_surface_comparison(player_name, surface_ratings)
+        
+        # Filter out surfaces where player hasn't played
+        played_surfaces = {s: data for s, data in comparison.items() if data is not None}
+        
+        if len(played_surfaces) < 2:
+            return "Insufficient data for surface comparison"
+        
+        print(f"\n=== {player_name.upper()} SURFACE ANALYSIS ===")
+        print(f"{'Surface':<10} {'Raw ELO':<8} {'Rank':<6} {'Percentile':<10} {'Z-Score':<8} {'Rel.Strength':<12}")
+        print("-" * 70)
+        
+        surface_performance = {}
+        
+        for surface, data in played_surfaces.items():
+            print(f"{surface:<10} {data['raw_rating']:<8.0f} {data['rank']:<6} "
+                f"{data['percentile']:<10.1f}% {data['z_score']:<8.2f} {data['relative_strength']:<12.1f}%")
+            
+            # Store for specialization analysis
+            surface_performance[surface] = {
+                'percentile': data['percentile'],
+                'z_score': data['z_score'],
+                'rank': data['rank']
+            }
+        
+        # Determine true specialization based on percentile rankings
+        best_surface_by_percentile = max(surface_performance.items(), 
+                                    key=lambda x: x[1]['percentile'])
+        worst_surface_by_percentile = min(surface_performance.items(), 
+                                        key=lambda x: x[1]['percentile'])
+        
+        print(f"\n=== SPECIALIZATION ANALYSIS ===")
+        print(f"Best surface: {best_surface_by_percentile[0]} "
+            f"({best_surface_by_percentile[1]['percentile']:.1f}th percentile, "
+            f"rank #{best_surface_by_percentile[1]['rank']})")
+        print(f"Worst surface: {worst_surface_by_percentile[0]} "
+            f"({worst_surface_by_percentile[1]['percentile']:.1f}th percentile, "
+            f"rank #{worst_surface_by_percentile[1]['rank']})")
+        
+        percentile_gap = (best_surface_by_percentile[1]['percentile'] - 
+                        worst_surface_by_percentile[1]['percentile'])
+        
+        if percentile_gap > 20:
+            print(f"STRONG SURFACE SPECIALIST: {percentile_gap:.1f} percentile point difference")
+        elif percentile_gap > 10:
+            print(f"MODERATE SURFACE PREFERENCE: {percentile_gap:.1f} percentile point difference")
+        else:
+            print(f"WELL-ROUNDED PLAYER: Only {percentile_gap:.1f} percentile point difference")
+        
+        return surface_performance
