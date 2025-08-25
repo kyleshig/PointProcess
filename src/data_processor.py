@@ -290,9 +290,9 @@ class TennisDataProcessor:
         
         return surface_performance
     
-    def calculate_recent_form(self, matches_df, window_days=90):
+    def calculate_recent_form(self, window_days=90):
         """Calculate recent form metrics for each player"""
-        df = matches_df.copy().sort_values('tourney_date')
+        df = self.matches_df.copy().sort_values('tourney_date')
 
         form_data = []
 
@@ -335,6 +335,56 @@ class TennisDataProcessor:
                 })
         
         return pd.DataFrame(form_data)
+    
+    def calculate_head_to_head(self):
+        """Calculate head-to-head records between players"""
+        df = self.matches_df.copy().sort_values('tourney_date')
+
+        h2h_records = {}
+
+        for idx, match in df.iterrows():
+            winner = match['winner_name']
+            loser = match['loser_name']
+
+            # Create consistent pairing key
+            pair = tuple(sorted([winner, loser]))
+
+            if pair not in h2h_records:
+                h2h_records[pair] = {
+                    'player1': pair[0],
+                    'player2': pair[1],
+                    'player1_wins': 0,
+                    'player2_wins': 0,
+                    'total_matches': 0,
+                    'surfaces': {},
+                    'last_match_date': None
+                }
+            
+            # Update record
+            h2h_records[pair]['total_matches'] += 1
+            h2h_records[pair]['last_match_date'] = match['tourney_date']
+
+            # Update wins
+            if winner == pair[0]:
+                h2h_records[pair]['player1_wins'] += 1
+            else:
+                h2h_records[pair]['player2_wins'] += 1
+            
+            # Update surface-specific records
+            surface = match['surface']
+            if surface not in h2h_records[pair]['surfaces']:
+                h2h_records[pair]['surfaces'][surface] = {
+                    'player1_wins': 0, 'player2_wins': 0
+                }
+        
+            if winner == pair[0]:
+                h2h_records[pair]['surfaces'][surface]['player1_wins'] += 1
+            else:
+                h2h_records[pair]['surfaces'][surface]['player2_wins'] += 1
+    
+        return h2h_records
+
+
 
 
 
