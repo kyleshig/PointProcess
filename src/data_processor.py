@@ -289,3 +289,52 @@ class TennisDataProcessor:
             print(f"WELL-ROUNDED PLAYER: Only {percentile_gap:.1f} percentile point difference")
         
         return surface_performance
+    
+    def calculate_recent_form(self, matches_df, window_days=90):
+        """Calculate recent form metrics for each player"""
+        df = matches_df.copy().sort_values('tourney_date')
+
+        form_data = []
+
+        for idx, match in df.iterrows():
+            match_date = match['tourney_date']
+            winner = match['winner_name']
+            loser = match['loser_name']
+
+            # Calculate form for both players
+            for player in [winner, loser]:
+                # Get matches in the last window_days
+                cutoff_date = match_date - pd.Timedelta(days=window_days)
+
+                recent_matches = df[
+                    (df['tourney_date'] >= cutoff_date) &
+                    (df['tourney_date'] < match_date) &
+                    ((df['winner_name'] == player) | (df['loser_name'] == player))     
+                ]
+
+                if len(recent_matches) > 0:
+                    wins = len(recent_matches[recent_matches['winner_name'] == player])
+                    total = len(recent_matches)
+                    win_rate = wins / total
+
+                    # Exponentially weighted win rate (more recent matches weighted higher)
+                    weights = np.exp(-0.1 * (match_date - recent_matches['tourney_date']).dt.days)
+                    weighted_wins = np.sum(weights * (recent_matches['winner_name'] == player))
+                    weighted_total =  np.sum(weights)
+                    weighted_win_rate = weighted_wins / weighted_total
+                else:
+                    win_rate = 0.5 # Default for no recent matches
+                    weighted_win_rate = 0.5
+                
+                form_data.append({
+                    'date': match_date,
+                    'player': player,
+                    'recent_matches': len(recent_matches),
+                    'win_rate': win_rate,
+                    'weighted_win_rate': weighted_win_rate
+                })
+        
+        return pd.DataFrame(form_data)
+
+
+
