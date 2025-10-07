@@ -8,6 +8,8 @@ from sklearn.calibration import calibration_curve
 from sklearn.metrics import brier_score_loss, log_loss
 
 class TennisMLPipeline:
+    """Tennis match predictor baseline using logistic regression"""
+
     def __init__(self, training_df):
         """Initialize with pre-built training DataFrame from TennisFeatureEngineer"""
 
@@ -16,7 +18,7 @@ class TennisMLPipeline:
         self.scaler = StandardScaler()
 
         # Extract only numeric features (exclude target, dates, strings, etc.)
-        exclude_columns = ['target']
+        exclude_columns = ['target', 'surface_hard', 'surface_clay', 'surface_grass']
         
         # Identify numeric columns only
         numeric_columns = []
